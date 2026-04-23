@@ -1,42 +1,74 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getWorkExperience, getProjects, getSkills, getEducation, uploadResume } from "../api";
+
 export default function Vault({ t, setPage }) {
   const [active, setActive] = useState("work");
+  const [work, setWork] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [skills, setSkills] = useState({ Technical: [], Soft: [] });
+  const [education, setEducation] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState("");
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
+  const fetchAll = async () => {
+    setLoading(true);
+    try {
+      const [workRes, projRes, skillRes, eduRes] = await Promise.all([
+        getWorkExperience(),
+        getProjects(),
+        getSkills(),
+        getEducation(),
+      ]);
+      setWork(workRes.data);
+      setProjects(projRes.data);
+      setEducation(eduRes.data);
+
+      // Group skills by type
+      const technical = skillRes.data.filter(s => s.skill_type === "technical").map(s => s.skill_name);
+      const soft = skillRes.data.filter(s => s.skill_type === "soft").map(s => s.skill_name);
+      setSkills({ Technical: technical, Soft: soft });
+    } catch (err) {
+      console.error("Failed to fetch vault data", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadMsg("");
+    try {
+      await uploadResume(file);
+      setUploadMsg("Resume parsed successfully!");
+      fetchAll();
+    } catch (err) {
+      setUploadMsg("Failed to parse resume. Try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const nav = [
-    { id: "work", label: "Work Experience", count: 3 },
-    { id: "projects", label: "Projects", count: 4 },
-    { id: "skills", label: "Skills", count: 12 },
-    { id: "education", label: "Education", count: 1 },
-    { id: "certs", label: "Certifications", count: 2 },
-    { id: "achievements", label: "Achievements", count: 3 },
+    { id: "work", label: "Work Experience", count: work.length },
+    { id: "projects", label: "Projects", count: projects.length },
+    { id: "skills", label: "Skills", count: skills.Technical.length + skills.Soft.length },
+    { id: "education", label: "Education", count: education.length },
   ];
-
-  const work = [
-    { company: "Accenture", role: "Software Engineer", period: "Jan 2023 – Present", bullets: ["Built REST APIs handling 50k+ daily requests", "Cut deployment time 40% via CI/CD pipelines", "Led migration from monolith to microservices architecture"] },
-    { company: "Infosys", role: "Associate Developer", period: "Jun 2021 – Dec 2022", bullets: ["Migrated legacy PHP codebase to Node.js", "Mentored 3 junior developers on code review practices"] },
-    { company: "TCS", role: "Intern", period: "Jan – May 2021", bullets: ["Developed internal HR dashboard using React and REST APIs"] },
-  ];
-
-  const projects = [
-    { name: "Business Card Scanner", tech: ["Python", "Tesseract OCR", "SQLite", "Tkinter"], desc: "Extracts and stores contact info from business card images using OCR." },
-    { name: "Resume Tailor", tech: ["React", "FastAPI", "PostgreSQL", "Groq LLM"], desc: "AI-powered resume customisation — the very product you're using." },
-    { name: "Expense Tracker", tech: ["React Native", "Firebase"], desc: "Mobile budgeting app with alerts, categories, and spending analytics." },
-    { name: "Portfolio CMS", tech: ["Next.js", "Sanity.io", "Vercel"], desc: "Headless CMS-driven personal portfolio with integrated blog." },
-  ];
-
-  const skills = {
-    Technical: ["Python", "React", "FastAPI", "PostgreSQL", "Docker", "Git", "SQL", "REST APIs", "Node.js", "TypeScript"],
-    Soft: ["Problem Solving", "Team Leadership"],
-  };
 
   return (
     <div className="page-enter" style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "calc(100vh - 44px)" }}>
 
       {/* Sidebar */}
       <div style={{ borderRight: `1px solid ${t.rule}` }}>
-        {/* Vault header */}
         <div style={{ padding: "28px 28px 20px", borderBottom: `1px solid ${t.rule}` }}>
-          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700, letterSpacing: "-0.3px" }}>Your Vault</div>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700 }}>Your Vault</div>
           <div style={{ fontSize: 11, color: t.textSub, marginTop: 4 }}>Experience profile</div>
         </div>
 
@@ -50,110 +82,103 @@ export default function Vault({ t, setPage }) {
         </nav>
 
         <div style={{ margin: "0 20px", borderTop: `1px solid ${t.rule}`, paddingTop: 20 }}>
-          <button style={{ width: "100%", padding: "10px", border: `1px solid ${t.border2}`, background: "transparent", color: t.textSub, fontSize: 11, letterSpacing: "0.04em", cursor: "pointer" }}>
-            ↑ Upload Resume
-          </button>
+          <label style={{ width: "100%", display: "block", padding: "10px", border: `1px solid ${t.border2}`, background: "transparent", color: t.textSub, fontSize: 11, letterSpacing: "0.04em", cursor: "pointer", textAlign: "center" }}>
+            {uploading ? "Parsing..." : "↑ Upload Resume"}
+            <input type="file" accept=".pdf,.docx" onChange={handleUpload} style={{ display: "none" }} />
+          </label>
+          {uploadMsg && <div style={{ fontSize: 11, marginTop: 8, color: uploadMsg.includes("success") ? t.success : t.danger, textAlign: "center" }}>{uploadMsg}</div>}
         </div>
       </div>
 
       {/* Main content */}
       <div style={{ padding: "36px 48px" }}>
-        {/* Section header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingBottom: 20, borderBottom: `2px solid ${t.text}`, marginBottom: 32 }}>
-  <h2>
-    {nav.find(n => n.id === active)?.label}
-  </h2>
+          <h2>{nav.find(n => n.id === active)?.label}</h2>
+          <button onClick={() => setPage("New Session")} style={{ padding: "9px 22px", border: "none", background: t.accentStrong, color: t.bg, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+            New Session →
+          </button>
+        </div>
 
-  <div style={{ display: "flex", gap: "10px" }}>
-    <button className="btn-primary">
-      + Add Entry
-    </button>
-
-    <button
-      onClick={() => setPage("New Session")}
-      style={{
-        padding: "9px 22px",
-        border: "none",
-        background: "orange",
-        color: "white",
-        fontSize: 11,
-        fontWeight: 600,
-        cursor: "pointer"
-      }}
-    >
-      New Session →
-    </button>
-  </div>
-</div>
-
-        {/* Work */}
-        {active === "work" && (
-          <div>
-            {work.map((w, i) => (
-              <div key={i} className="entry-row" style={{ display: "grid", gridTemplateColumns: "180px 1fr 60px", gap: 32, padding: "24px 12px", borderBottom: `1px solid ${t.rule}`, alignItems: "start", background: "transparent", transition: "background 0.15s" }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{w.company}</div>
-                  <div style={{ fontSize: 11, color: t.textSub, lineHeight: 1.5 }}>{w.period}</div>
-                </div>
-                <div>
-                  <div style={{ fontFamily: "'Playfair Display', serif", fontStyle: "italic", fontSize: 14, color: t.accentStrong, marginBottom: 10 }}>{w.role}</div>
-                  {w.bullets.map((b, j) => (
-                    <div key={j} style={{ fontSize: 12, color: t.textMid, lineHeight: 1.75, display: "flex", gap: 10, marginBottom: 2 }}>
-                      <span style={{ color: t.border2, flexShrink: 0, marginTop: 2 }}>—</span>{b}
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "80px 0", color: t.textSub, fontStyle: "italic", fontFamily: "'Playfair Display', serif" }}>Loading vault...</div>
+        ) : (
+          <>
+            {/* Work */}
+            {active === "work" && (
+              <div>
+                {work.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "80px 0", color: t.textSub, fontFamily: "'Playfair Display', serif", fontStyle: "italic" }}>No work experience yet. Upload your resume to get started.</div>
+                ) : work.map((w, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 32, padding: "24px 12px", borderBottom: `1px solid ${t.rule}`, alignItems: "start" }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{w.company}</div>
+                      <div style={{ fontSize: 11, color: t.textSub }}>{w.start_date} – {w.end_date || "Present"}</div>
                     </div>
-                  ))}
-                </div>
-                <button className="hover-line" style={{ fontSize: 11, background: "none", border: "none", color: t.textSub, cursor: "pointer", paddingTop: 2 }}>Edit</button>
+                    <div>
+                      <div style={{ fontFamily: "'Playfair Display', serif", fontStyle: "italic", fontSize: 14, color: t.accentStrong, marginBottom: 10 }}>{w.role}</div>
+                      {(w.responsibilities || []).map((b, j) => (
+                        <div key={j} style={{ fontSize: 12, color: t.textMid, lineHeight: 1.75, display: "flex", gap: 10, marginBottom: 2 }}>
+                          <span style={{ color: t.border2, flexShrink: 0 }}>—</span>{b}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {/* Projects */}
-        {active === "projects" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-            {projects.map((p, i) => (
-              <div key={i} style={{ paddingBottom: 24, borderBottom: `1px solid ${t.rule}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-                  <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700 }}>{p.name}</div>
-                  <button className="hover-line" style={{ fontSize: 11, background: "none", border: "none", color: t.textSub, cursor: "pointer" }}>Edit</button>
-                </div>
-                <div style={{ fontSize: 12, color: t.textMid, lineHeight: 1.75, marginBottom: 14 }}>{p.desc}</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {p.tech.map((tk, j) => (
-                    <span key={j} className="tag-chip" style={{ fontSize: 10, padding: "3px 9px", border: `1px solid ${t.border2}`, color: t.textSub, letterSpacing: "0.04em", cursor: "default" }}>{tk}</span>
-                  ))}
-                </div>
+            {/* Projects */}
+            {active === "projects" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+                {projects.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "80px 0", color: t.textSub, fontFamily: "'Playfair Display', serif", fontStyle: "italic", gridColumn: "span 2" }}>No projects yet.</div>
+                ) : projects.map((p, i) => (
+                  <div key={i} style={{ paddingBottom: 24, borderBottom: `1px solid ${t.rule}` }}>
+                    <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{p.name}</div>
+                    <div style={{ fontSize: 12, color: t.textMid, lineHeight: 1.75, marginBottom: 14 }}>{p.description}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {(p.tech_stack || []).map((tk, j) => (
+                        <span key={j} style={{ fontSize: 10, padding: "3px 9px", border: `1px solid ${t.border2}`, color: t.textSub, letterSpacing: "0.04em" }}>{tk}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {/* Skills */}
-        {active === "skills" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
-            {Object.entries(skills).map(([type, list]) => (
-              <div key={type}>
-                <div style={{ fontFamily: "'Playfair Display', serif", fontStyle: "italic", fontSize: 14, color: t.accentStrong, marginBottom: 16 }}>{type}</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {list.map((s, i) => (
-                    <span key={i} className="tag-chip" style={{ padding: "7px 16px", border: `1px solid ${t.border2}`, fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
-                      {s}
-                      <span style={{ color: t.textSub, cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</span>
-                    </span>
-                  ))}
-                  <span style={{ padding: "7px 16px", border: `1px dashed ${t.border2}`, fontSize: 12, color: t.textSub, cursor: "pointer" }}>+ Add</span>
-                </div>
+            {/* Skills */}
+            {active === "skills" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
+                {Object.entries(skills).map(([type, list]) => (
+                  <div key={type}>
+                    <div style={{ fontFamily: "'Playfair Display', serif", fontStyle: "italic", fontSize: 14, color: t.accentStrong, marginBottom: 16 }}>{type}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {list.map((s, i) => (
+                        <span key={i} style={{ padding: "7px 16px", border: `1px solid ${t.border2}`, fontSize: 12, fontWeight: 500 }}>{s}</span>
+                      ))}
+                      {list.length === 0 && <span style={{ fontSize: 12, color: t.textSub, fontStyle: "italic" }}>No {type.toLowerCase()} skills yet.</span>}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {!["work", "projects", "skills"].includes(active) && (
-          <div style={{ textAlign: "center", padding: "80px 0", borderBottom: `1px solid ${t.rule}` }}>
-            <div style={{ fontFamily: "'Playfair Display', serif", fontStyle: "italic", fontSize: 18, color: t.textSub, marginBottom: 12 }}>Nothing here yet.</div>
-            <div style={{ fontSize: 12, color: t.textSub }}>Click "Add Entry" to get started.</div>
-          </div>
+            {/* Education */}
+            {active === "education" && (
+              <div>
+                {education.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "80px 0", color: t.textSub, fontFamily: "'Playfair Display', serif", fontStyle: "italic" }}>No education entries yet.</div>
+                ) : education.map((e, i) => (
+                  <div key={i} style={{ padding: "24px 12px", borderBottom: `1px solid ${t.rule}` }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{e.institution}</div>
+                    <div style={{ fontFamily: "'Playfair Display', serif", fontStyle: "italic", fontSize: 13, color: t.accentStrong, marginBottom: 4 }}>{e.degree} in {e.field}</div>
+                    <div style={{ fontSize: 11, color: t.textSub }}>{e.start_year} – {e.end_year || "Present"}</div>
+                    {e.gpa && <div style={{ fontSize: 11, color: t.textSub, marginTop: 4 }}>GPA: {e.gpa}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

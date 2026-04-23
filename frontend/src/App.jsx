@@ -15,10 +15,17 @@ const FontLoader = () => (
 
 export default function App() {
   const [dark, setDark] = useState(true);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const stored = localStorage.getItem("user");
+    return stored ? JSON.parse(stored) : null;
+  });
   const [page, setPage] = useState("Landing");
 
-  const goTo = (p) => setPage(p);
+  const [sessionId, setSessionId] = useState(null);
+  const goTo = (p, id = null) => {
+    setPage(p);
+    if (id) setSessionId(id);
+  };
   const t = dark ? theme.dark : theme.light;
 
   useEffect(() => {
@@ -150,6 +157,8 @@ export default function App() {
                   onMouseLeave={(e) => handleHover(e, false)}
                   onClick={() => {
                     setUser(null);
+                    localStorage.removeItem("token");
+                    localStorage.removeItem("user");
                     goTo("Landing");
                   }}
                 >
@@ -200,7 +209,7 @@ export default function App() {
           )}
 
           {page === "Session Status" && user && (
-            <SessionStatus t={t} />
+            <SessionStatus t={t} sessionId={sessionId} />
           )}
         </div>
       </div>

@@ -184,11 +184,19 @@ def process_single_jd(jd_id: int, user_id: int, vault: dict, user_info: dict, db
     try:
         jd = db.query(JobDescription).filter(JobDescription.id == jd_id).first()
         if not jd:
+            print(f"ERROR: JD {jd_id} not found")
             return
 
+        print(f"INFO: Starting JD {jd_id} — vault has {sum(len(v) for v in vault.values())} items")
+
         selected_ids = call1_select(vault, jd.content)
+        print(f"INFO: Call 1 done for JD {jd_id} — selected: {selected_ids}")
+
         selected_items = fetch_selected_items(selected_ids, vault)
+        print(f"INFO: Fetched selected items for JD {jd_id}")
+
         tailored_content = call2_write(selected_items, jd.content, user_info)
+        print(f"INFO: Call 2 done for JD {jd_id}")
 
         record = TailoredResume(
             jd_id=jd.id,
@@ -196,19 +204,25 @@ def process_single_jd(jd_id: int, user_id: int, vault: dict, user_info: dict, db
             content=json.dumps(tailored_content)
         )
         db.add(record)
-
         jd.status = "done"
         db.commit()
+        print(f"INFO: JD {jd_id} completed successfully")
 
     except Exception as e:
-        jd = db.query(JobDescription).filter(JobDescription.id == jd_id).first()
-        if jd:
-            jd.status = "failed"
-            db.commit()
+        import traceback
+        print(f"ERROR processing JD {jd_id}: {type(e).__name__}: {str(e)}")
+        print(traceback.format_exc())
+        try:
+            jd = db.query(JobDescription).filter(JobDescription.id == jd_id).first()
+            if jd:
+                jd.status = "failed"
+                db.commit()
+        except:
+            pass
     finally:
         db.close()
 
-
+        
 @router.post("/sessions/{session_id}")
 def tailor_session(session_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     session = db.query(JobSession).filter(
@@ -217,33 +231,7 @@ def tailor_session(session_id: int, current_user: User = Depends(get_current_use
     ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    jds = db.query(JobDescription).filter(
-        JobDescription.session_id == session_id,
-        JobDescription.status == "pending"
-    ).all()
-
-    if not jds:
-        raise HTTPException(status_code=400, detail="No pending JDs found in this session")
-
-    vault, user_info = get_full_vault(current_user.id, db)
-    db_url = os.getenv("DATABASE_URL")
-    jd_ids = [jd.id for jd in jds]
-
-    session.status = "processing"
-    db.commit()
-
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        for jd_id in jd_ids:
-            executor.submit(process_single_jd, jd_id, current_user.id, vault, user_info, db_url)
-
-    session.status = "done"
-    db.commit()
-
-    return {"message": f"Tailoring complete for {len(jd_ids)} JDs", "jd_ids": jd_ids}
-
-
-@router.get("/sessions/{session_id}/results")
+    
 def get_results(session_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     jds = db.query(JobDescription).filter(
         JobDescription.session_id == session_id,
