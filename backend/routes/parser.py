@@ -19,19 +19,52 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
-    text = ""
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-    return text
+    import fitz
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+    full_text = []
+    
+    for page in doc:
+        text = page.get_text()
+        # Extract hyperlinks from page annotations
+        links = page.get_links()
+        for link in links:
+            if link.get("uri"):
+                url = link["uri"]
+                # Find the text in the rect area of the link
+                rect = fitz.Rect(link["from"])
+                link_text = page.get_text("text", clip=rect).strip()
+                if link_text:
+                    text = text.replace(link_text, f"{link_text} [{url}]")
+        full_text.append(text)
+    
+    doc.close()
+    return "\n".join(full_text)
 
 
-def extract_text_from_docx(file_bytes: bytes) -> str:
+def extract_text_from_docx(file_bytes: bytes) -> tuple[str, dict]:
     doc = docx.Document(io.BytesIO(file_bytes))
-    return "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
-
+    
+    # Extract hyperlinks from relationships
+    hyperlinks = {}
+    for rel in doc.part.rels.values():
+        if "hyperlink" in rel.reltype:
+            hyperlinks[rel.rId] = rel._target
+    
+    # Extract text with hyperlink markers
+    from docx.oxml.ns import qn
+    full_text = []
+    for para in doc.paragraphs:
+        para_text = para.text
+        # Check for hyperlinks in paragraph XML
+        for hyperlink in para._p.findall(f'.//{qn("w:hyperlink")}'):
+            r_id = hyperlink.get(qn("r:id"))
+            if r_id and r_id in hyperlinks:
+                link_text = "".join(r.text for r in hyperlink.findall(f'.//{qn("w:t")}') if r.text)
+                url = hyperlinks[r_id]
+                para_text = para_text.replace(link_text, f"{link_text} [{url}]")
+        full_text.append(para_text)
+    
+    return "\n".join(full_text)
 
 def parse_resume_with_llm(raw_text: str) -> dict:
     prompt = f"""
@@ -67,6 +100,7 @@ The JSON must follow this exact structure:
             "tech_stack": [],
             "problem_solved": "",
             "outcome": ""
+            "link": ""
         }}
     ],
     "leadership": [
@@ -113,7 +147,8 @@ Rules:
 - For skills, skill_type must be either "technical" or "soft"
 - For is_current, use "true" if it is the current job, otherwise "false"
 - Return ONLY the JSON, nothing else
-
+- If the same experience appears in multiple sections (e.g. work experience and leadership), place it in the most appropriate single section only. Never duplicate content across sections.
+- For projects, extract any GitHub links, demo links, or URLs mentioned near the project name or description and put them in the link field. If no link found, leave it empty.
 Resume:
 {raw_text}
 """

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
+from datetime import datetime
 import re
 
 class UserSignup(BaseModel):
@@ -96,6 +97,7 @@ class ProjectCreate(BaseModel):
     tech_stack: Optional[list[str]] = None
     problem_solved: Optional[str] = None
     outcome: Optional[str] = None
+    link: Optional[str] = None
 
 class ProjectResponse(ProjectCreate):
     id: int
@@ -162,5 +164,42 @@ class SkillCreate(BaseModel):
 class SkillResponse(SkillCreate):
     id: int
     user_id: int
+    class Config:
+        from_attributes = True
+
+# Job Session
+class JobSessionCreate(BaseModel):
+    name: str
+
+class JobSessionResponse(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Job Description
+class JobDescriptionCreate(BaseModel):
+    title: Optional[str] = None
+    content: str
+
+    @field_validator("content")
+    def content_must_not_be_empty(cls, v):
+        if len(v.strip()) < 50:
+            raise ValueError("Job description seems too short, paste the full JD")
+        return v.strip()
+
+class JobDescriptionResponse(BaseModel):
+    id: int
+    session_id: int
+    user_id: int
+    title: Optional[str] = None
+    content: str
+    status: str
+    created_at: datetime
+
     class Config:
         from_attributes = True

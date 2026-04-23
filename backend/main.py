@@ -3,6 +3,9 @@ from database import Base, engine
 from routes.auth import router as auth_router
 from routes.vault import router as vault_router
 from routes.parser import router as parser_router
+from routes.jd import router as jd_router
+from routes.tailor import router as tailor_router
+from routes.output import router as output_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -11,6 +14,9 @@ app = FastAPI()
 app.include_router(auth_router)
 app.include_router(vault_router)
 app.include_router(parser_router)
+app.include_router(jd_router)
+app.include_router(tailor_router)
+app.include_router(output_router)
 
 @app.get("/")
 def root():

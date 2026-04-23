@@ -15,7 +15,7 @@ class User(Base):
     github = Column(String, nullable=True)
     portfolio = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
+    
 
 
 class Education(Base):
@@ -53,6 +53,7 @@ class Project(Base):
     tech_stack = Column(ARRAY(String), nullable=True)
     problem_solved = Column(String, nullable=True)
     outcome = Column(String, nullable=True)
+    link = Column(String, nullable=True)
 
 class Leadership(Base):
     __tablename__ = "leadership"
@@ -100,3 +101,32 @@ class Skill(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     skill_name = Column(String, nullable=False)
     skill_type = Column(String, nullable=False)
+
+class JobSession(Base):
+    __tablename__ = "job_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class JobDescription(Base):
+    __tablename__ = "job_descriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("job_sessions.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String, nullable=True)
+    content = Column(String, nullable=False)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class TailoredResume(Base):
+    __tablename__ = "tailored_resumes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    jd_id = Column(Integer, ForeignKey("job_descriptions.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
